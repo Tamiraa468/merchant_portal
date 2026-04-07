@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(supabase migration:*)",
+      "Bash(supabase db:*)",
+      "Bash(supabase:*)",
+      "Bash(grep -r 'SUPABASE_URL\\\\|NEXT_PUBLIC_SUPABASE_URL' /Users/mgt/Documents/Merchant_web/merchant/.env*)",
+      "Bash(grep -A 30 \"CREATE TABLE.*locations\" /Users/mgt/Documents/Merchant_web/merchant/supabase/migrations/*.sql)",
+      "Bash(grep -i \"one.*active\\\\|unique.*index\\\\|partial.*index\\\\|kyc\\\\|phone\\\\|avatar\\\\|vehicle\\\\|license\" /Users/mgt/Documents/Merchant_web/merchant/supabase/migrations/*.sql)",
+      "Bash(grep -n \"CREATE TABLE.*locations\" /Users/mgt/Documents/Merchant_web/merchant/supabase/migrations/*.sql)",
+      "Bash(grep -B 5 -A 10 \"ALTER TABLE.*locations\\\\|address_text\\\\|label.*TEXT\" /Users/mgt/Documents/Merchant_web/merchant/supabase/migrations/*.sql)",
+      "Bash(grep -r \"claim_delivery_task\\\\|courier_earnings\\\\|verify_epod_otp\" /Users/mgt/Documents/Merchant_web/merchant/supabase/migrations/*.sql)"
+    ]
+  }
+}

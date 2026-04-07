@@ -1,0 +1,1 @@
+-- Applied directly via Supabase dashboard

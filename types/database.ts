@@ -1,9 +1,9 @@
-export type UserRole = "org_user" | "admin" | "courier" | "customer";
+export type UserRole = "org_user" | "admin" | "courier" | "customer" | "merchant";
 
 export type OrgType = "restaurant" | "store" | "pharmacy" | "warehouse";
 
 // Roles allowed to access merchant pages
-export const MERCHANT_ALLOWED_ROLES: UserRole[] = ["org_user", "admin"];
+export const MERCHANT_ALLOWED_ROLES: UserRole[] = ["org_user", "admin", "merchant"];
 
 export const ORG_TYPE_OPTIONS: { value: OrgType; label: string }[] = [
   { value: "restaurant", label: "Restaurant" },
@@ -29,6 +29,7 @@ export interface Product {
   price: number;
   unit: string;
   is_active: boolean;
+  unavailable_until?: string | null;
   created_at: string;
 }
 
@@ -45,7 +46,7 @@ export interface AuthError {
   code?: string;
 }
 
-// Delivery Task Types
+// Delivery Task Types — 'canceled' removed; 'cancelled' is the canonical spelling.
 export type TaskStatus =
   | "draft"
   | "created"
@@ -53,7 +54,8 @@ export type TaskStatus =
   | "assigned"
   | "picked_up"
   | "delivered"
-  | "canceled"
+  | "completed"
+  | "cancelled"
   | "failed";
 
 // Task Status Configuration
@@ -93,12 +95,17 @@ export const TASK_STATUS_CONFIG: Record<
   delivered: {
     label: "Delivered",
     color: "green",
-    description: "Package has been delivered successfully",
+    description: "Package has been delivered, awaiting OTP confirmation",
   },
-  canceled: {
-    label: "Canceled",
+  completed: {
+    label: "Completed",
+    color: "green",
+    description: "Delivery confirmed via ePOD — earnings recorded",
+  },
+  cancelled: {
+    label: "Cancelled",
     color: "gray",
-    description: "Task has been canceled",
+    description: "Task has been cancelled",
   },
   failed: {
     label: "Failed",
@@ -109,17 +116,18 @@ export const TASK_STATUS_CONFIG: Record<
 
 // Valid status transitions
 export const TASK_STATUS_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
-  draft: ["published", "canceled"],
-  created: ["published", "canceled"], // legacy compat
-  published: ["assigned", "canceled"],
-  assigned: ["picked_up", "canceled"],
-  picked_up: ["delivered", "failed", "canceled"],
-  delivered: [],
-  canceled: [],
+  draft: ["published", "cancelled"],
+  created: ["published", "cancelled"], // legacy compat
+  published: ["assigned", "cancelled"],
+  assigned: ["picked_up", "cancelled"],
+  picked_up: ["delivered", "failed", "cancelled"],
+  delivered: ["completed"],
+  completed: [],
+  cancelled: [],
   failed: [],
 };
 
-// Status transition handlers
+// Status transition helpers
 export const canTransitionStatus = (
   from: TaskStatus,
   to: TaskStatus,
@@ -134,11 +142,11 @@ export const getAvailableStatusTransitions = (
 };
 
 export const getStatusLabel = (status: TaskStatus): string => {
-  return TASK_STATUS_CONFIG[status].label;
+  return TASK_STATUS_CONFIG[status]?.label ?? status;
 };
 
 export const getStatusColor = (status: TaskStatus) => {
-  return TASK_STATUS_CONFIG[status].color;
+  return TASK_STATUS_CONFIG[status]?.color ?? "default";
 };
 
 export interface Location {
@@ -164,6 +172,7 @@ export interface DeliveryTask {
   note?: string | null;
   receiver_name?: string | null;
   receiver_phone?: string | null;
+  customer_email?: string | null;
   package_value?: number | null;
   delivery_fee: number;
   suggested_fee?: number | null;
@@ -176,6 +185,7 @@ export interface DeliveryTask {
   delivered_at?: string | null;
   canceled_at?: string | null;
   failed_at?: string | null;
+  completed_at?: string | null;
   // Joined relations
   pickup_location?: Location;
   dropoff_location?: Location;
@@ -322,3 +332,33 @@ export const PAYMENT_STATUS_CONFIG: Record<
   failed: { label: "Failed", color: "red" },
   refunded: { label: "Refunded", color: "gray" },
 };
+
+// ── Org Settings ──
+
+export interface OrgSettings {
+  org_id: string;
+  store_name: string | null;
+  store_address: string | null;
+  store_phone: string | null;
+  store_description: string | null;
+  logo_url: string | null;
+  is_accepting_orders: boolean;
+  weekly_hours: WeeklyHour[];
+  updated_at: string;
+}
+
+export interface WeeklyHour {
+  day: number; // 0=Sun … 6=Sat
+  open: string; // "09:00"
+  close: string; // "21:00"
+  closed: boolean;
+}
+
+export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export const DEFAULT_WEEKLY_HOURS: WeeklyHour[] = DAY_NAMES.map((_, day) => ({
+  day,
+  open: "09:00",
+  close: "21:00",
+  closed: day === 0, // Sunday closed by default
+}));

@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import LogoutButton from "@/components/auth/LogoutButton";
 import Link from "next/link";
-import { Table, Tag, Button, Space, Typography, App } from "antd";
+import { Table, Tag, Button, Space, Typography, App, Badge } from "antd";
 import {
   PlusOutlined,
-  ReloadOutlined,
   ArrowLeftOutlined,
   SendOutlined,
+  WifiOutlined,
 } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { DeliveryTask, TaskStatus } from "@/types/database";
@@ -31,7 +31,8 @@ const statusColors: Record<TaskStatus, string> = {
   assigned: "orange",
   picked_up: "purple",
   delivered: "green",
-  canceled: "red",
+  completed: "green",
+  cancelled: "red",
   failed: "magenta",
 };
 
@@ -42,9 +43,12 @@ const statusLabels: Record<TaskStatus, string> = {
   assigned: "Assigned",
   picked_up: "Picked Up",
   delivered: "Delivered",
-  canceled: "Canceled",
+  completed: "Completed",
+  cancelled: "Cancelled",
   failed: "Failed",
 };
+
+const PAGE_SIZE = 10;
 
 export default function TasksPage() {
   const supabase = createClient();
@@ -52,32 +56,39 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<DeliveryTaskWithLocations[]>([]);
   const [loading, setLoading] = useState(true);
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState<string | null>(null);
+  const [isLive, setIsLive] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  const fetchTasks = useCallback(async () => {
+  const fetchTasks = useCallback(async (currentPage = 1) => {
     if (!orgId) return;
 
     setLoading(true);
+    const from = (currentPage - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
     try {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from("delivery_tasks")
         .select(
-          `
-          *,
+          `*,
           pickup_location:locations!pickup_location_id(address_text),
-          dropoff_location:locations!dropoff_location_id(address_text)
-        `,
+          dropoff_location:locations!dropoff_location_id(address_text)`,
+          { count: "exact" },
         )
         .eq("org_id", orgId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(from, to);
 
       if (error) {
-        console.error("Error fetching tasks:", error);
         message.error("Failed to load delivery tasks");
       } else {
         setTasks(data || []);
+        setTotal(count ?? 0);
       }
-    } catch (err) {
-      console.error("Failed to fetch tasks:", err);
+    } catch {
       message.error("Failed to load delivery tasks");
     } finally {
       setLoading(false);
@@ -87,9 +98,7 @@ export default function TasksPage() {
   // Get org_id on mount
   useEffect(() => {
     const getOrgId = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: profile } = await supabase
@@ -98,22 +107,44 @@ export default function TasksPage() {
         .eq("id", user.id)
         .single();
 
-      if (profile?.org_id) {
-        setOrgId(profile.org_id);
-      }
+      if (profile?.org_id) setOrgId(profile.org_id);
     };
 
     getOrgId();
   }, [supabase]);
 
-  // Fetch tasks when orgId is available
+  // Initial fetch + real-time subscription
   useEffect(() => {
-    if (orgId) {
-      fetchTasks();
-    }
-  }, [orgId, fetchTasks]);
+    if (!orgId) return;
 
-  const [publishing, setPublishing] = useState<string | null>(null);
+    fetchTasks(page);
+
+    // Subscribe to all changes on this org's tasks
+    channelRef.current = supabase
+      .channel(`tasks-list-${orgId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "delivery_tasks",
+          filter: `org_id=eq.${orgId}`,
+        },
+        () => {
+          fetchTasks(page);
+        },
+      )
+      .subscribe((status) => {
+        setIsLive(status === "SUBSCRIBED");
+      });
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId]);
 
   const handlePublish = async (taskId: string) => {
     setPublishing(taskId);
@@ -123,16 +154,13 @@ export default function TasksPage() {
       });
       if (error) throw error;
       message.success("Task published! Couriers can now see it.");
-      fetchTasks();
     } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : typeof err === "object" && err !== null && "message" in err
-            ? String((err as { message: unknown }).message)
-            : String(err);
-      console.error("Publish error:", JSON.stringify(err));
-      message.error(`Failed to publish: ${errorMessage}`);
+      const msg =
+        err instanceof Error ? err.message :
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : String(err);
+      message.error(`Failed to publish: ${msg}`);
     } finally {
       setPublishing(null);
     }
@@ -144,52 +172,75 @@ export default function TasksPage() {
       key: "receiver",
       render: (_, record) => (
         <div>
-          <div className="font-medium">{record.receiver_name}</div>
-          <div className="text-gray-500 text-sm">{record.receiver_phone}</div>
+          <div className="font-medium">{record.receiver_name || "—"}</div>
+          <div className="text-gray-500 text-xs">{record.receiver_phone}</div>
         </div>
       ),
     },
     {
       title: "Pickup",
       key: "pickup",
+      responsive: ["md"],
       render: (_, record) => (
-        <div className="max-w-[200px]">
-          <div className="truncate">
-            {record.pickup_location?.address_text || "N/A"}
-          </div>
+        <div className="max-w-48 truncate text-sm">
+          {record.pickup_location?.address_text || "N/A"}
         </div>
       ),
     },
     {
       title: "Dropoff",
       key: "dropoff",
+      responsive: ["md"],
       render: (_, record) => (
-        <div className="max-w-[200px]">
-          <div className="truncate">
-            {record.dropoff_location?.address_text || "N/A"}
-          </div>
+        <div className="max-w-48 truncate text-sm">
+          {record.dropoff_location?.address_text || "N/A"}
         </div>
       ),
+    },
+    {
+      title: "Fee",
+      dataIndex: "delivery_fee",
+      key: "delivery_fee",
+      render: (fee: number) => (
+        <span className="font-semibold text-blue-600">
+          ₮{(fee ?? 0).toLocaleString()}
+        </span>
+      ),
+      align: "right" as const,
     },
     {
       title: "Status",
       dataIndex: "status",
       key: "status",
       render: (status: TaskStatus) => (
-        <Tag color={statusColors[status]}>{statusLabels[status]}</Tag>
+        <Tag color={statusColors[status] ?? "default"}>
+          {statusLabels[status] ?? status}
+        </Tag>
       ),
+      filters: [
+        { text: "Draft", value: "draft" },
+        { text: "Published", value: "published" },
+        { text: "Assigned", value: "assigned" },
+        { text: "Picked Up", value: "picked_up" },
+        { text: "Delivered", value: "delivered" },
+        { text: "Completed", value: "completed" },
+        { text: "Cancelled", value: "cancelled" },
+        { text: "Failed", value: "failed" },
+      ],
+      onFilter: (value, record) => record.status === value,
     },
     {
       title: "Created",
       dataIndex: "created_at",
       key: "created_at",
+      responsive: ["lg"],
       render: (date: string) => new Date(date).toLocaleDateString(),
     },
     {
       title: "Action",
       key: "action",
       render: (_, record) => (
-        <Space>
+        <Space size="small">
           {(record.status === "draft" || record.status === "created") && (
             <Button
               type="primary"
@@ -197,14 +248,13 @@ export default function TasksPage() {
               icon={<SendOutlined />}
               loading={publishing === record.id}
               onClick={() => handlePublish(record.id)}
+              aria-label={`Publish task for ${record.receiver_name}`}
             >
-              Publish
+              <span className="hidden sm:inline">Publish</span>
             </Button>
           )}
           <Link href={`/tasks/${record.id}`}>
-            <Button type="link" size="small">
-              View
-            </Button>
+            <Button type="link" size="small">View</Button>
           </Link>
         </Space>
       ),
@@ -216,22 +266,29 @@ export default function TasksPage() {
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-3">
               <Link
                 href="/dashboard"
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Back to dashboard"
               >
                 <ArrowLeftOutlined />
               </Link>
-              <Title level={4} className="!mb-0">
+              <Title level={4} className="mb-0!">
                 Delivery Tasks
               </Title>
+              <Badge
+                status={isLive ? "success" : "default"}
+                title={isLive ? "Live updates active" : "Connecting…"}
+              />
+              {isLive && (
+                <span className="text-xs text-green-600 hidden sm:inline">
+                  <WifiOutlined /> Live
+                </span>
+              )}
             </div>
-            <Space>
-              <Button icon={<ReloadOutlined />} onClick={fetchTasks}>
-                Refresh
-              </Button>
+            <Space wrap>
               <Link href="/tasks/new">
                 <Button type="primary" icon={<PlusOutlined />}>
                   New Task
@@ -245,13 +302,23 @@ export default function TasksPage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 sm:p-6">
           <Table
             dataSource={tasks}
             columns={columns}
             rowKey="id"
             loading={loading}
-            pagination={{ pageSize: 10 }}
+            scroll={{ x: "max-content" }}
+            pagination={{
+              current: page,
+              pageSize: PAGE_SIZE,
+              total,
+              showTotal: (t, range) => `${range[0]}-${range[1]} of ${t} tasks`,
+              onChange: (p) => {
+                setPage(p);
+                fetchTasks(p);
+              },
+            }}
             locale={{
               emptyText: (
                 <div className="py-8 text-center">

@@ -3,7 +3,16 @@ import type { NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 // Routes that require authentication
-const protectedRoutes = ["/dashboard", "/products", "/tasks", "/onboarding"];
+const protectedRoutes = [
+  "/dashboard",
+  "/products",
+  "/tasks",
+  "/orders",
+  "/analytics",
+  "/financials",
+  "/settings",
+  "/onboarding",
+];
 
 // Routes that should redirect to dashboard if already authenticated
 const authRoutes = ["/auth/login", "/auth/register"];
