@@ -169,17 +169,14 @@ export default function EpodVerification({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-epod-otp`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ task_id: taskId }),
+      const res = await fetch("/api/send-epod-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
-      );
+        body: JSON.stringify({ task_id: taskId }),
+      });
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

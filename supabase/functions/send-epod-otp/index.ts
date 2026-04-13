@@ -1,10 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import nodemailer from "npm:nodemailer";
 
 // ── Environment ──────────────────────────────────────────────────────────────
 const SUPABASE_URL       = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY  = Deno.env.get("SUPABASE_ANON_KEY")!;
-const RESEND_API_KEY     = Deno.env.get("RESEND_API_KEY") ?? "";
-const FROM_EMAIL         = Deno.env.get("FROM_EMAIL") ?? "Delivery <noreply@example.com>";
+const GMAIL_USER         = Deno.env.get("GMAIL_USER") ?? "";
+const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD") ?? "";
+const FROM_EMAIL         = Deno.env.get("FROM_EMAIL") ?? `Delivery <${GMAIL_USER}>`;
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 const CORS_HEADERS = {
@@ -94,10 +96,9 @@ Deno.serve(async (req: Request) => {
       expires_at     = result.expires_at;
     }
 
-    // ── Send email via Resend ─────────────────────────────────────────────
-    if (!RESEND_API_KEY) {
-      // Dev / staging: log OTP to function logs, don't send email
-      console.warn("[send-epod-otp] RESEND_API_KEY not set — dev mode, skipping email");
+    // ── Send email via Gmail SMTP ───────────────────────────────────────────
+    if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+      console.warn("[send-epod-otp] Gmail credentials not set — dev mode, skipping email");
       console.log(`[send-epod-otp] OTP for task ${task_id}: ${otp}`);
     } else {
       const expiresLabel = new Date(expires_at).toLocaleTimeString("en-US", {
@@ -105,25 +106,17 @@ Deno.serve(async (req: Request) => {
         minute: "2-digit",
       });
 
-      const emailRes = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${RESEND_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: FROM_EMAIL,
-          to: [customer_email],
-          subject: "Your Delivery Verification Code",
-          html: buildEmailHtml(otp, expiresLabel),
-        }),
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
       });
 
-      if (!emailRes.ok) {
-        const errBody = await emailRes.json().catch(() => ({}));
-        console.error("[send-epod-otp] Resend error:", JSON.stringify(errBody));
-        return respond({ error: "Failed to send verification email" }, 502);
-      }
+      await transporter.sendMail({
+        from: FROM_EMAIL,
+        to: customer_email,
+        subject: "Your Delivery Verification Code",
+        html: buildEmailHtml(otp, expiresLabel),
+      });
     }
 
     // Never echo the OTP back to the client

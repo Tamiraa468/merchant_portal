@@ -9,7 +9,10 @@
       "Bash(grep -i \"one.*active\\\\|unique.*index\\\\|partial.*index\\\\|kyc\\\\|phone\\\\|avatar\\\\|vehicle\\\\|license\" /Users/mgt/Documents/Merchant_web/merchant/supabase/migrations/*.sql)",
       "Bash(grep -n \"CREATE TABLE.*locations\" /Users/mgt/Documents/Merchant_web/merchant/supabase/migrations/*.sql)",
       "Bash(grep -B 5 -A 10 \"ALTER TABLE.*locations\\\\|address_text\\\\|label.*TEXT\" /Users/mgt/Documents/Merchant_web/merchant/supabase/migrations/*.sql)",
-      "Bash(grep -r \"claim_delivery_task\\\\|courier_earnings\\\\|verify_epod_otp\" /Users/mgt/Documents/Merchant_web/merchant/supabase/migrations/*.sql)"
+      "Bash(grep -r \"claim_delivery_task\\\\|courier_earnings\\\\|verify_epod_otp\" /Users/mgt/Documents/Merchant_web/merchant/supabase/migrations/*.sql)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(ls -la /Users/mgt/Documents/Merchant_web/merchant/*.config.*)"
     ]
   }
 }
