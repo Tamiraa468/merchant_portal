@@ -9,31 +9,28 @@ import {
   Descriptions,
   Tag,
   Table,
-  Button,
+  Button as AntButton,
   Space,
   Typography,
   Spin,
   Result,
   App,
   Popconfirm,
-  Badge,
-  Alert,
 } from "antd";
 import {
-  ArrowLeftOutlined,
   EnvironmentOutlined,
   UserOutlined,
   ShoppingCartOutlined,
   DeleteOutlined,
   SendOutlined,
   StopOutlined,
-  WifiOutlined,
 } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { DeliveryTask, TaskStatus, Product } from "@/types/database";
 import EpodVerification from "@/components/epod/EpodVerification";
+import { PageHeader } from "@/components/ui";
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface TaskWithDetails extends Omit<
   DeliveryTask,
@@ -47,8 +44,10 @@ interface TaskItemWithProduct {
   id: string;
   task_id: string;
   product_id: string;
-  qty: number;
-  note?: string | null;
+  product_name: string;
+  unit_price: number;
+  quantity: number;
+  total_price: number;
   product: Product | null;
 }
 
@@ -65,15 +64,15 @@ const statusColors: Record<TaskStatus, string> = {
 };
 
 const statusLabels: Record<TaskStatus, string> = {
-  draft: "Draft",
-  created: "Draft",
-  published: "Published",
-  assigned: "Assigned",
-  picked_up: "Picked Up",
-  delivered: "Delivered",
-  completed: "Completed",
-  cancelled: "Cancelled",
-  failed: "Failed",
+  draft: "Ноорог",
+  created: "Ноорог",
+  published: "Нийтлэгдсэн",
+  assigned: "Оноогдсон",
+  picked_up: "Авсан",
+  delivered: "Хүргэсэн",
+  completed: "Дууссан",
+  cancelled: "Цуцлагдсан",
+  failed: "Амжилтгүй",
 };
 
 export default function TaskDetailPage() {
@@ -91,7 +90,6 @@ export default function TaskDetailPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLive, setIsLive] = useState(false);
-  const [liveUpdate, setLiveUpdate] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const fetchTask = useCallback(async () => {
@@ -109,7 +107,7 @@ export default function TaskDetailPage() {
 
       if (taskError) {
         if (taskError.code === "PGRST116") {
-          setError("Task not found");
+          setError("Даалгавар олдсонгүй");
         } else {
           throw taskError;
         }
@@ -125,18 +123,16 @@ export default function TaskDetailPage() {
 
       setTaskItems(itemsData || []);
     } catch {
-      setError("Failed to load task");
+      setError("Даалгавар ачаалахад алдаа гарлаа");
     } finally {
       setLoading(false);
     }
   }, [supabase, taskId]);
 
-  // Initial fetch
   useEffect(() => {
     if (taskId) fetchTask();
   }, [taskId, fetchTask]);
 
-  // Real-time subscription for this task
   useEffect(() => {
     if (!taskId) return;
 
@@ -152,8 +148,6 @@ export default function TaskDetailPage() {
         },
         () => {
           fetchTask();
-          setLiveUpdate(true);
-          setTimeout(() => setLiveUpdate(false), 3000);
         },
       )
       .subscribe((status) => {
@@ -175,10 +169,10 @@ export default function TaskDetailPage() {
         .eq("id", task.id);
 
       if (deleteError) throw deleteError;
-      message.success("Task deleted");
+      message.success("Даалгавар устгагдлаа");
       router.push("/tasks");
     } catch {
-      message.error("Failed to delete task");
+      message.error("Даалгавар устгахад алдаа гарлаа");
       setDeleting(false);
     }
   };
@@ -191,14 +185,15 @@ export default function TaskDetailPage() {
         p_task_id: task.id,
       });
       if (error) throw error;
-      message.success("Task published! Couriers can now see it.");
+      message.success("Даалгавар нийтлэгдлээ. Жолооч нар харах боломжтой.");
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message :
-        typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message: unknown }).message)
-          : String(err);
-      message.error(`Failed to publish: ${msg}`);
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : String(err);
+      message.error(`Нийтлэхэд алдаа гарлаа: ${msg}`);
     } finally {
       setPublishing(false);
     }
@@ -213,49 +208,48 @@ export default function TaskDetailPage() {
         .update({ status: newStatus })
         .eq("id", task.id);
       if (error) throw error;
-      message.success(`Status updated to ${statusLabels[newStatus]}`);
+      message.success(`Төлөв өөрчлөгдлөө: ${statusLabels[newStatus]}`);
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message :
-        typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message: unknown }).message)
-          : String(err);
-      message.error(`Failed: ${msg}`);
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : String(err);
+      message.error(`Алдаа гарлаа: ${msg}`);
     } finally {
       setUpdatingStatus(false);
     }
   };
 
   const totalAmount = taskItems.reduce((sum, item) => {
-    return sum + (item.product?.price || 0) * item.qty;
+    return sum + item.total_price;
   }, 0);
 
   const itemColumns: ColumnsType<TaskItemWithProduct> = [
     {
-      title: "Product",
+      title: "Бүтээгдэхүүн",
       key: "product",
-      render: (_, record) => record.product?.name || "Unknown Product",
+      render: (_, record) =>
+        record.product_name || record.product?.name || "Тодорхойгүй бүтээгдэхүүн",
     },
     {
-      title: "Unit Price",
+      title: "Нэгж үнэ",
       key: "price",
-      render: (_, record) =>
-        `₮${(record.product?.price || 0).toLocaleString()}`,
+      render: (_, record) => `₮${record.unit_price.toLocaleString()}`,
       align: "right",
     },
     {
-      title: "Qty",
-      dataIndex: "qty",
-      key: "qty",
+      title: "Тоо",
+      dataIndex: "quantity",
+      key: "quantity",
       align: "center",
     },
     {
-      title: "Total",
+      title: "Нийт",
       key: "total",
       render: (_, record) => (
-        <Text strong>
-          ₮{((record.product?.price || 0) * record.qty).toLocaleString()}
-        </Text>
+        <Text strong>₮{record.total_price.toLocaleString()}</Text>
       ),
       align: "right",
     },
@@ -263,7 +257,7 @@ export default function TaskDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <Spin size="large" />
       </div>
     );
@@ -271,14 +265,15 @@ export default function TaskDetailPage() {
 
   if (error || !task) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
+      <div className="space-y-6 max-w-4xl mx-auto">
+        <PageHeader title="Даалгавар олдсонгүй" backHref="/tasks" />
         <Result
           status="404"
-          title="Task Not Found"
-          subTitle={error || "The task you're looking for doesn't exist."}
+          title="Даалгавар олдсонгүй"
+          subTitle={error || "Хайсан даалгавар тань байхгүй байна."}
           extra={
             <Link href="/tasks">
-              <Button type="primary">Back to Tasks</Button>
+              <AntButton type="primary">Даалгавар руу буцах</AntButton>
             </Link>
           }
         />
@@ -290,244 +285,233 @@ export default function TaskDetailPage() {
   const canDelete = task.status === "draft" || task.status === "created";
   const canPublish = task.status === "draft" || task.status === "created";
 
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-3">
-              <Link
-                href="/tasks"
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                aria-label="Back to tasks"
-              >
-                <ArrowLeftOutlined />
-              </Link>
-              <Title level={4} className="mb-0!">
-                Task Details
-              </Title>
-              <Badge
-                status={isLive ? "success" : "default"}
-                title={isLive ? "Live updates active" : "Connecting…"}
-              />
-              {isLive && (
-                <span className="text-xs text-green-600 hidden sm:inline">
-                  <WifiOutlined /> Live
-                </span>
-              )}
-            </div>
-            <Space wrap>
-              {canPublish && (
-                <Button
-                  type="primary"
-                  icon={<SendOutlined />}
-                  loading={publishing}
-                  onClick={handlePublish}
-                  aria-label="Publish task"
-                >
-                  Publish
-                </Button>
-              )}
-              {canCancel && (
-                <Popconfirm
-                  title="Cancel this task?"
-                  onConfirm={() => handleStatusChange("cancelled")}
-                  okText="Yes, Cancel"
-                  cancelText="No"
-                  okButtonProps={{ danger: true }}
-                >
-                  <Button icon={<StopOutlined />} loading={updatingStatus}>
-                    Cancel Task
-                  </Button>
-                </Popconfirm>
-              )}
-              {canDelete && (
-                <Popconfirm
-                  title="Delete this task?"
-                  description="This action cannot be undone."
-                  onConfirm={handleDelete}
-                  okText="Yes, Delete"
-                  cancelText="Cancel"
-                  okButtonProps={{ danger: true }}
-                >
-                  <Button danger icon={<DeleteOutlined />} loading={deleting}>
-                    Delete
-                  </Button>
-                </Popconfirm>
-              )}
-            </Space>
-          </div>
-        </div>
-      </header>
-
-      {/* Live update flash */}
-      {liveUpdate && (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-          <Alert
-            message="Task status updated in real-time"
-            type="success"
-            showIcon
-            closable
-          />
-        </div>
+  const headerAction = (
+    <Space wrap>
+      {canPublish && (
+        <AntButton
+          type="primary"
+          icon={<SendOutlined />}
+          loading={publishing}
+          onClick={handlePublish}
+        >
+          Нийтлэх
+        </AntButton>
       )}
+      {canCancel && (
+        <Popconfirm
+          title="Энэ даалгаврыг цуцлах уу?"
+          onConfirm={() => handleStatusChange("cancelled")}
+          okText="Тийм, цуцлах"
+          cancelText="Үгүй"
+          okButtonProps={{ danger: true }}
+        >
+          <AntButton icon={<StopOutlined />} loading={updatingStatus}>
+            Даалгавар цуцлах
+          </AntButton>
+        </Popconfirm>
+      )}
+      {canDelete && (
+        <Popconfirm
+          title="Энэ даалгаврыг устгах уу?"
+          description="Энэ үйлдлийг буцаах боломжгүй."
+          onConfirm={handleDelete}
+          okText="Тийм, устгах"
+          cancelText="Цуцлах"
+          okButtonProps={{ danger: true }}
+        >
+          <AntButton danger icon={<DeleteOutlined />} loading={deleting}>
+            Устгах
+          </AntButton>
+        </Popconfirm>
+      )}
+    </Space>
+  );
 
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Status Card */}
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-6">
-            <div>
-              <Text type="secondary" className="text-xs uppercase">Status</Text>
-              <div className="mt-1">
-                <Tag
-                  color={statusColors[task.status] ?? "default"}
-                  className="text-base px-3 py-1"
-                >
-                  {statusLabels[task.status] ?? task.status}
-                </Tag>
-              </div>
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <PageHeader
+        title="Даалгаврын дэлгэрэнгүй"
+        backHref="/tasks"
+        action={headerAction}
+      />
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-6">
+          <div>
+            <Text type="secondary" className="text-xs uppercase">
+              Төлөв
+            </Text>
+            <div className="mt-1 flex items-center gap-2">
+              <Tag
+                color={statusColors[task.status] ?? "default"}
+                className="text-base px-3 py-1"
+              >
+                {statusLabels[task.status] ?? task.status}
+              </Tag>
+              {isLive && (
+                <span
+                  className="inline-block w-1.5 h-1.5 rounded-full bg-green-500"
+                  aria-label="Шууд холболт идэвхтэй"
+                  title="Шууд холболт идэвхтэй"
+                />
+              )}
             </div>
+          </div>
+          <div>
+            <Text type="secondary" className="text-xs uppercase">
+              Хүргэлтийн төлбөр
+            </Text>
+            <div className="mt-1">
+              <Text strong className="text-2xl text-blue-600">
+                ₮{(task.delivery_fee ?? 0).toLocaleString()}
+              </Text>
+            </div>
+            <Text type="secondary" className="text-xs">
+              Жолоочийн орлого
+            </Text>
+          </div>
+          <div className="text-right">
+            <Text type="secondary" className="text-xs uppercase">
+              Үүсгэсэн
+            </Text>
+            <div className="mt-1">
+              <Text>{new Date(task.created_at).toLocaleString("mn-MN")}</Text>
+            </div>
+          </div>
+          {task.package_value && (
             <div>
-              <Text type="secondary" className="text-xs uppercase">Delivery Fee</Text>
+              <Text type="secondary" className="text-xs uppercase">
+                Багцын үнэ
+              </Text>
               <div className="mt-1">
-                <Text strong className="text-2xl text-blue-600">
-                  ₮{(task.delivery_fee ?? 0).toLocaleString()}
+                <Text strong className="text-lg">
+                  ₮{task.package_value.toLocaleString()}
                 </Text>
               </div>
-              <Text type="secondary" className="text-xs">Courier earnings</Text>
             </div>
-            <div className="text-right">
-              <Text type="secondary" className="text-xs uppercase">Created</Text>
-              <div className="mt-1">
-                <Text>{new Date(task.created_at).toLocaleString()}</Text>
-              </div>
-            </div>
-            {task.package_value && (
-              <div>
-                <Text type="secondary" className="text-xs uppercase">Package Value</Text>
-                <div className="mt-1">
-                  <Text strong className="text-lg">
-                    ₮{task.package_value.toLocaleString()}
-                  </Text>
-                </div>
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* Locations Card */}
-        <Card
-          title={
-            <Space>
-              <EnvironmentOutlined aria-hidden="true" />
-              <span>Locations</span>
-            </Space>
-          }
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Text type="secondary" className="text-xs uppercase">Pickup</Text>
-              <div className="mt-1 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <Text strong>{task.pickup_location?.address_text || "N/A"}</Text>
-                {task.pickup_note && (
-                  <div className="mt-1 text-sm text-gray-500">{task.pickup_note}</div>
-                )}
-              </div>
-            </div>
-            <div>
-              <Text type="secondary" className="text-xs uppercase">Dropoff</Text>
-              <div className="mt-1 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <Text strong>{task.dropoff_location?.address_text || "N/A"}</Text>
-                {task.dropoff_note && (
-                  <div className="mt-1 text-sm text-gray-500">{task.dropoff_note}</div>
-                )}
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Receiver Card */}
-        <Card
-          title={
-            <Space>
-              <UserOutlined aria-hidden="true" />
-              <span>Receiver</span>
-            </Space>
-          }
-        >
-          <Descriptions column={{ xs: 1, sm: 2 }}>
-            <Descriptions.Item label="Name">
-              {task.receiver_name || "N/A"}
-            </Descriptions.Item>
-            <Descriptions.Item label="Phone">
-              {task.receiver_phone ? (
-                <a href={`tel:${task.receiver_phone}`}>{task.receiver_phone}</a>
-              ) : "N/A"}
-            </Descriptions.Item>
-            <Descriptions.Item label="Customer Email">
-              {task.customer_email ? (
-                <a href={`mailto:${task.customer_email}`} className="text-blue-600">
-                  {task.customer_email}
-                </a>
-              ) : (
-                <Text type="secondary">Not set</Text>
-              )}
-            </Descriptions.Item>
-          </Descriptions>
-        </Card>
-
-        {/* ePOD Verification — shown only when courier has marked delivered */}
-        {task.status === "delivered" && (
-          <Card
-            title={
-              <Space>
-                <span>📦 Proof of Delivery</span>
-              </Space>
-            }
-            styles={{ header: { borderBottom: "2px solid #3b82f6" } }}
-          >
-            <EpodVerification
-              taskId={task.id}
-              customerEmail={task.customer_email}
-            />
-          </Card>
-        )}
-
-        {/* Items Card */}
-        <Card
-          title={
-            <Space>
-              <ShoppingCartOutlined aria-hidden="true" />
-              <span>Items ({taskItems.length})</span>
-            </Space>
-          }
-        >
-          {taskItems.length > 0 ? (
-            <>
-              <Table
-                dataSource={taskItems}
-                columns={itemColumns}
-                rowKey="id"
-                pagination={false}
-                size="middle"
-                scroll={{ x: "max-content" }}
-              />
-              <div className="flex justify-end mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <Space size="large">
-                  <Text className="text-lg">Total:</Text>
-                  <Text strong className="text-xl text-blue-600">
-                    ₮{totalAmount.toLocaleString()}
-                  </Text>
-                </Space>
-              </div>
-            </>
-          ) : (
-            <Text type="secondary">No items attached to this task.</Text>
           )}
+        </div>
+      </Card>
+
+      <Card
+        title={
+          <Space>
+            <EnvironmentOutlined aria-hidden="true" />
+            <span>Цэгүүд</span>
+          </Space>
+        }
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <Text type="secondary" className="text-xs uppercase">
+              Авах
+            </Text>
+            <div className="mt-1 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <Text strong>{task.pickup_location?.address_text || "—"}</Text>
+              {task.pickup_note && (
+                <div className="mt-1 text-sm text-gray-500">
+                  {task.pickup_note}
+                </div>
+              )}
+            </div>
+          </div>
+          <div>
+            <Text type="secondary" className="text-xs uppercase">
+              Хүргэх
+            </Text>
+            <div className="mt-1 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <Text strong>{task.dropoff_location?.address_text || "—"}</Text>
+              {task.dropoff_note && (
+                <div className="mt-1 text-sm text-gray-500">
+                  {task.dropoff_note}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card
+        title={
+          <Space>
+            <UserOutlined aria-hidden="true" />
+            <span>Хүлээн авагч</span>
+          </Space>
+        }
+      >
+        <Descriptions column={{ xs: 1, sm: 2 }}>
+          <Descriptions.Item label="Нэр">
+            {task.receiver_name || "—"}
+          </Descriptions.Item>
+          <Descriptions.Item label="Утас">
+            {task.receiver_phone ? (
+              <a href={`tel:${task.receiver_phone}`}>{task.receiver_phone}</a>
+            ) : (
+              "—"
+            )}
+          </Descriptions.Item>
+          <Descriptions.Item label="Үйлчлүүлэгчийн имэйл">
+            {task.customer_email ? (
+              <a
+                href={`mailto:${task.customer_email}`}
+                className="text-blue-600"
+              >
+                {task.customer_email}
+              </a>
+            ) : (
+              <Text type="secondary">Оруулаагүй</Text>
+            )}
+          </Descriptions.Item>
+        </Descriptions>
+      </Card>
+
+      {task.status === "delivered" && (
+        <Card
+          title={
+            <Space>
+              <span>📦 Хүргэлтийн баталгаа</span>
+            </Space>
+          }
+          styles={{ header: { borderBottom: "2px solid #3b82f6" } }}
+        >
+          <EpodVerification
+            taskId={task.id}
+            customerEmail={task.customer_email}
+          />
         </Card>
-      </main>
+      )}
+
+      <Card
+        title={
+          <Space>
+            <ShoppingCartOutlined aria-hidden="true" />
+            <span>Бараа ({taskItems.length})</span>
+          </Space>
+        }
+      >
+        {taskItems.length > 0 ? (
+          <>
+            <Table
+              dataSource={taskItems}
+              columns={itemColumns}
+              rowKey="id"
+              pagination={false}
+              size="middle"
+              scroll={{ x: "max-content" }}
+            />
+            <div className="flex justify-end mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <Space size="large">
+                <Text className="text-lg">Нийт:</Text>
+                <Text strong className="text-xl text-blue-600">
+                  ₮{totalAmount.toLocaleString()}
+                </Text>
+              </Space>
+            </div>
+          </>
+        ) : (
+          <Text type="secondary">Энэ даалгаварт бараа хавсраагүй.</Text>
+        )}
+      </Card>
     </div>
   );
 }

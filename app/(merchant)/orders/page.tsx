@@ -2,24 +2,19 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import Link from "next/link";
 import {
-  Table,
   Tag,
-  Button,
   Tabs,
-  Typography,
   Space,
   Drawer,
   Descriptions,
   Popconfirm,
   App,
   Badge,
-  Empty,
-  Spin,
+  Typography,
+  Button as AntButton,
 } from "antd";
 import {
-  ArrowLeftOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   EyeOutlined,
@@ -28,14 +23,29 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import type { Order, OrderItem, OrderStatus } from "@/types/database";
 import { ORDER_STATUS_CONFIG } from "@/types/database";
+import { DataTable, PageHeader } from "@/components/ui";
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface OrderWithItems extends Order {
   order_items?: OrderItem[];
 }
 
 const PAGE_SIZE = 10;
+
+type TabKey = "needs_action" | "active" | "history";
+
+const TAB_FILTERS: Record<TabKey, OrderStatus[]> = {
+  needs_action: ["paid"],
+  active: ["preparing", "ready_for_delivery"],
+  history: ["cancelled", "pending_payment"],
+};
+
+const TAB_EMPTY_LABEL: Record<TabKey, string> = {
+  needs_action: "хүлээгдэж буй",
+  active: "бэлтгэгдэж буй",
+  history: "түүхэнд",
+};
 
 export default function OrdersPage() {
   const supabase = createClient();
@@ -45,48 +55,46 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [liveFlash, setLiveFlash] = useState(false);
-  const [activeTab, setActiveTab] = useState<"needs_action" | "active" | "history">("needs_action");
+  const [activeTab, setActiveTab] = useState<TabKey>("needs_action");
   const [drawerOrder, setDrawerOrder] = useState<OrderWithItems | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  const tabFilters: Record<typeof activeTab, OrderStatus[]> = {
-    needs_action: ["paid"],
-    active: ["preparing", "ready_for_delivery"],
-    history: ["cancelled", "pending_payment"],
-  };
+  const fetchOrders = useCallback(
+    async (tab: TabKey = activeTab, currentPage = 1) => {
+      if (!orgId) return;
+      setLoading(true);
+      const from = (currentPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
 
-  const fetchOrders = useCallback(async (tab = activeTab, currentPage = 1) => {
-    if (!orgId) return;
-    setLoading(true);
-    const from = (currentPage - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
+      try {
+        const { data, error, count } = await supabase
+          .from("orders")
+          .select("*, order_items(*)", { count: "exact" })
+          .eq("org_id", orgId)
+          .in("status", TAB_FILTERS[tab])
+          .order("created_at", { ascending: false })
+          .range(from, to);
 
-    try {
-      const { data, error, count } = await supabase
-        .from("orders")
-        .select("*, order_items(*)", { count: "exact" })
-        .eq("org_id", orgId)
-        .in("status", tabFilters[tab])
-        .order("created_at", { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-      setOrders(data ?? []);
-      setTotal(count ?? 0);
-    } catch {
-      message.error("Failed to load orders");
-    } finally {
-      setLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId, activeTab, supabase, message]);
+        if (error) throw error;
+        setOrders(data ?? []);
+        setTotal(count ?? 0);
+      } catch {
+        message.error("Захиалга ачаалахад алдаа гарлаа");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [orgId, activeTab, supabase, message],
+  );
 
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
       const { data: profile } = await supabase
         .from("profiles")
@@ -104,7 +112,6 @@ export default function OrdersPage() {
     setPage(1);
   }, [orgId, activeTab, fetchOrders]);
 
-  // Real-time subscription
   useEffect(() => {
     if (!orgId) return;
 
@@ -121,8 +128,10 @@ export default function OrdersPage() {
       )
       .subscribe((status) => setIsLive(status === "SUBSCRIBED"));
 
-    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
@@ -133,13 +142,13 @@ export default function OrdersPage() {
         .update({ status: newStatus })
         .eq("id", orderId);
       if (error) throw error;
-      message.success(`Order ${ORDER_STATUS_CONFIG[newStatus].label}`);
-      // Update drawer if open
+      message.success(`Захиалга: ${ORDER_STATUS_CONFIG[newStatus].label}`);
       if (drawerOrder?.id === orderId) {
-        setDrawerOrder((prev) => prev ? { ...prev, status: newStatus } : null);
+        setDrawerOrder((prev) => (prev ? { ...prev, status: newStatus } : null));
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update order";
+      const msg =
+        err instanceof Error ? err.message : "Захиалгыг шинэчлэхэд алдаа гарлаа";
       message.error(msg);
     } finally {
       setUpdating(null);
@@ -148,7 +157,7 @@ export default function OrdersPage() {
 
   const columns: ColumnsType<OrderWithItems> = [
     {
-      title: "Customer",
+      title: "Үйлчлүүлэгч",
       key: "customer",
       render: (_, r) => (
         <div>
@@ -158,17 +167,18 @@ export default function OrdersPage() {
       ),
     },
     {
-      title: "Items",
+      title: "Бараа",
       key: "items",
       responsive: ["md"],
       render: (_, r) => (
         <div className="text-sm text-gray-600">
-          {r.order_items?.map((i) => `${i.product_name} ×${i.qty}`).join(", ") || "—"}
+          {r.order_items?.map((i) => `${i.product_name} ×${i.qty}`).join(", ") ||
+            "—"}
         </div>
       ),
     },
     {
-      title: "Total",
+      title: "Дүн",
       dataIndex: "total_amount",
       key: "total",
       render: (v: number) => (
@@ -177,7 +187,7 @@ export default function OrdersPage() {
       align: "right",
     },
     {
-      title: "Status",
+      title: "Төлөв",
       dataIndex: "status",
       key: "status",
       render: (s: OrderStatus) => (
@@ -187,61 +197,61 @@ export default function OrdersPage() {
       ),
     },
     {
-      title: "Received",
+      title: "Хүлээн авсан",
       dataIndex: "created_at",
       key: "created_at",
       responsive: ["lg"],
-      render: (d: string) => new Date(d).toLocaleString(),
+      render: (d: string) => new Date(d).toLocaleString("mn-MN"),
     },
     {
-      title: "Action",
+      title: "Үйлдэл",
       key: "action",
       render: (_, r) => (
         <Space size="small">
-          <Button
+          <AntButton
             size="small"
             icon={<EyeOutlined />}
             onClick={() => setDrawerOrder(r)}
-            aria-label={`View order from ${r.customer_name}`}
+            aria-label={`${r.customer_name}-ийн захиалга харах`}
           >
-            <span className="hidden sm:inline">View</span>
-          </Button>
+            <span className="hidden sm:inline">Харах</span>
+          </AntButton>
           {r.status === "paid" && (
-            <Button
+            <AntButton
               size="small"
               type="primary"
               icon={<CheckCircleOutlined />}
               loading={updating === r.id}
               onClick={() => handleStatusChange(r.id, "preparing")}
-              aria-label="Accept order"
             >
-              <span className="hidden sm:inline">Accept</span>
-            </Button>
+              <span className="hidden sm:inline">Хүлээн авах</span>
+            </AntButton>
           )}
           {(r.status === "paid" || r.status === "preparing") && (
             <Popconfirm
-              title="Reject this order?"
+              title="Энэ захиалгыг татгалзах уу?"
               onConfirm={() => handleStatusChange(r.id, "cancelled")}
-              okText="Reject"
+              okText="Татгалзах"
+              cancelText="Буцах"
               okButtonProps={{ danger: true }}
             >
-              <Button
+              <AntButton
                 size="small"
                 danger
                 icon={<CloseCircleOutlined />}
                 loading={updating === r.id}
-                aria-label="Reject order"
+                aria-label="Захиалгыг татгалзах"
               />
             </Popconfirm>
           )}
           {r.status === "preparing" && (
-            <Button
+            <AntButton
               size="small"
               onClick={() => handleStatusChange(r.id, "ready_for_delivery")}
               loading={updating === r.id}
             >
-              Ready
-            </Button>
+              Бэлэн
+            </AntButton>
           )}
         </Space>
       ),
@@ -253,77 +263,64 @@ export default function OrdersPage() {
       key: "needs_action",
       label: (
         <Space>
-          Needs Action
+          Хүлээгдэж буй
           {activeTab === "needs_action" && total > 0 && (
             <Badge count={total} size="small" />
           )}
         </Space>
       ),
     },
-    { key: "active", label: "Active" },
-    { key: "history", label: "History" },
+    { key: "active", label: "Бэлтгэгдэж буй" },
+    { key: "history", label: "Түүх" },
   ];
 
+  const liveIndicator = (
+    <Space>
+      <Badge status={isLive ? "success" : "default"} />
+      {isLive && (
+        <span className="text-xs text-green-600 hidden sm:inline">
+          <WifiOutlined /> Шууд
+        </span>
+      )}
+      {liveFlash && (
+        <span className="text-xs text-blue-600 animate-pulse">Шинэчлэгдлээ</span>
+      )}
+    </Space>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-3">
-              <Link href="/dashboard" className="text-gray-500 hover:text-gray-700" aria-label="Back">
-                <ArrowLeftOutlined />
-              </Link>
-              <Title level={4} className="mb-0!">Orders</Title>
-              <Badge status={isLive ? "success" : "default"} />
-              {isLive && (
-                <span className="text-xs text-green-600 hidden sm:inline">
-                  <WifiOutlined /> Live
-                </span>
-              )}
-              {liveFlash && (
-                <span className="text-xs text-blue-600 animate-pulse">New update!</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="space-y-6 max-w-[1400px] mx-auto">
+      <PageHeader title="Захиалга" action={liveIndicator} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
-          <Tabs
-            activeKey={activeTab}
-            onChange={(k) => setActiveTab(k as typeof activeTab)}
-            className="px-4 pt-2"
-            items={tabItems}
-          />
+      <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
+        <Tabs
+          activeKey={activeTab}
+          onChange={(k) => setActiveTab(k as TabKey)}
+          className="px-4 pt-2"
+          items={tabItems}
+        />
+      </div>
 
-          <div className="p-4">
-            <Table
-              dataSource={orders}
-              columns={columns}
-              rowKey="id"
-              loading={loading}
-              scroll={{ x: "max-content" }}
-              pagination={{
-                current: page,
-                pageSize: PAGE_SIZE,
-                total,
-                showTotal: (t, range) => `${range[0]}-${range[1]} of ${t}`,
-                onChange: (p) => { setPage(p); fetchOrders(activeTab, p); },
-              }}
-              locale={{
-                emptyText: (
-                  <Empty description={`No ${activeTab.replace("_", " ")} orders`} />
-                ),
-              }}
-            />
-          </div>
-        </div>
-      </main>
+      <DataTable<OrderWithItems>
+        columns={columns}
+        data={orders}
+        rowKey="id"
+        loading={loading}
+        pagination={{
+          current: page,
+          pageSize: PAGE_SIZE,
+          total,
+          onChange: (p) => {
+            setPage(p);
+            fetchOrders(activeTab, p);
+          },
+        }}
+        emptyTitle="Захиалга алга байна"
+        emptyDescription={`Одоогоор ${TAB_EMPTY_LABEL[activeTab]} захиалга алга.`}
+      />
 
-      {/* Order Detail Drawer */}
       <Drawer
-        title={`Order — ${drawerOrder?.customer_name ?? ""}`}
+        title={`Захиалга — ${drawerOrder?.customer_name ?? ""}`}
         open={!!drawerOrder}
         onClose={() => setDrawerOrder(null)}
         width={Math.min(480, typeof window !== "undefined" ? window.innerWidth : 480)}
@@ -331,35 +328,57 @@ export default function OrdersPage() {
         {drawerOrder && (
           <div className="space-y-4">
             <Descriptions column={1} size="small" bordered>
-              <Descriptions.Item label="Status">
+              <Descriptions.Item label="Төлөв">
                 <Tag color={ORDER_STATUS_CONFIG[drawerOrder.status]?.color ?? "default"}>
                   {ORDER_STATUS_CONFIG[drawerOrder.status]?.label}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Customer">{drawerOrder.customer_name}</Descriptions.Item>
-              <Descriptions.Item label="Phone">
-                <a href={`tel:${drawerOrder.customer_phone}`}>{drawerOrder.customer_phone}</a>
+              <Descriptions.Item label="Үйлчлүүлэгч">
+                {drawerOrder.customer_name}
               </Descriptions.Item>
-              <Descriptions.Item label="Subtotal">₮{drawerOrder.subtotal.toLocaleString()}</Descriptions.Item>
-              <Descriptions.Item label="Delivery Fee">₮{drawerOrder.delivery_fee.toLocaleString()}</Descriptions.Item>
-              <Descriptions.Item label="Total">
-                <Text strong className="text-blue-600">₮{drawerOrder.total_amount.toLocaleString()}</Text>
+              <Descriptions.Item label="Утас">
+                <a href={`tel:${drawerOrder.customer_phone}`}>
+                  {drawerOrder.customer_phone}
+                </a>
               </Descriptions.Item>
-              <Descriptions.Item label="Ordered">
-                {new Date(drawerOrder.created_at).toLocaleString()}
+              <Descriptions.Item label="Дэд дүн">
+                ₮{drawerOrder.subtotal.toLocaleString()}
+              </Descriptions.Item>
+              <Descriptions.Item label="Хүргэлтийн төлбөр">
+                ₮{drawerOrder.delivery_fee.toLocaleString()}
+              </Descriptions.Item>
+              <Descriptions.Item label="Нийт">
+                <Text strong className="text-blue-600">
+                  ₮{drawerOrder.total_amount.toLocaleString()}
+                </Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Захиалгын огноо">
+                {new Date(drawerOrder.created_at).toLocaleString("mn-MN")}
               </Descriptions.Item>
               {drawerOrder.note && (
-                <Descriptions.Item label="Note">{drawerOrder.note}</Descriptions.Item>
+                <Descriptions.Item label="Тэмдэглэл">
+                  {drawerOrder.note}
+                </Descriptions.Item>
               )}
             </Descriptions>
 
             {drawerOrder.order_items && drawerOrder.order_items.length > 0 && (
               <div>
-                <Text strong className="block mb-2">Items</Text>
+                <Text strong className="block mb-2">
+                  Бараа
+                </Text>
                 {drawerOrder.order_items.map((item) => (
-                  <div key={item.id} className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-700 text-sm">
-                    <span>{item.product_name} <span className="text-gray-500">×{item.qty}</span></span>
-                    <span className="font-medium">₮{item.line_total.toLocaleString()}</span>
+                  <div
+                    key={item.id}
+                    className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-700 text-sm"
+                  >
+                    <span>
+                      {item.product_name}{" "}
+                      <span className="text-gray-500">×{item.qty}</span>
+                    </span>
+                    <span className="font-medium">
+                      ₮{item.line_total.toLocaleString()}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -367,36 +386,44 @@ export default function OrdersPage() {
 
             <div className="flex gap-2 pt-2">
               {drawerOrder.status === "paid" && (
-                <Button
+                <AntButton
                   type="primary"
                   icon={<CheckCircleOutlined />}
                   loading={updating === drawerOrder.id}
                   onClick={() => handleStatusChange(drawerOrder.id, "preparing")}
                   className="flex-1"
                 >
-                  Accept Order
-                </Button>
+                  Хүлээн авах
+                </AntButton>
               )}
               {drawerOrder.status === "preparing" && (
-                <Button
+                <AntButton
                   type="primary"
                   loading={updating === drawerOrder.id}
-                  onClick={() => handleStatusChange(drawerOrder.id, "ready_for_delivery")}
+                  onClick={() =>
+                    handleStatusChange(drawerOrder.id, "ready_for_delivery")
+                  }
                   className="flex-1"
                 >
-                  Mark Ready
-                </Button>
+                  Бэлэн болсон
+                </AntButton>
               )}
-              {(drawerOrder.status === "paid" || drawerOrder.status === "preparing") && (
+              {(drawerOrder.status === "paid" ||
+                drawerOrder.status === "preparing") && (
                 <Popconfirm
-                  title="Reject this order?"
+                  title="Энэ захиалгыг татгалзах уу?"
                   onConfirm={() => handleStatusChange(drawerOrder.id, "cancelled")}
-                  okText="Reject"
+                  okText="Татгалзах"
+                  cancelText="Буцах"
                   okButtonProps={{ danger: true }}
                 >
-                  <Button danger loading={updating === drawerOrder.id} className="flex-1">
-                    Reject
-                  </Button>
+                  <AntButton
+                    danger
+                    loading={updating === drawerOrder.id}
+                    className="flex-1"
+                  >
+                    Татгалзах
+                  </AntButton>
                 </Popconfirm>
               )}
             </div>

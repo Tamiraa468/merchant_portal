@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { ORG_TYPE_OPTIONS, type OrgType } from "@/types/database";
 
 interface FormState {
@@ -12,7 +11,6 @@ interface FormState {
 
 export default function OrganizationForm() {
   const router = useRouter();
-  const supabase = createClient();
   const [formData, setFormData] = useState<FormState>({
     name: "",
     orgType: "",
@@ -24,7 +22,6 @@ export default function OrganizationForm() {
     e.preventDefault();
     setError(null);
 
-    // Validation
     if (!formData.name.trim()) {
       setError("Organization name is required");
       return;
@@ -38,26 +35,25 @@ export default function OrganizationForm() {
     setLoading(true);
 
     try {
-      const { data, error: rpcError } = await supabase.rpc(
-        "create_org_and_attach",
-        {
-          p_name: formData.name.trim(),
-          p_org_type: formData.orgType,
-        },
-      );
+      const res = await fetch("/api/onboarding/create-org", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          orgType: formData.orgType,
+        }),
+      });
 
-      if (rpcError) {
-        console.error("RPC error:", rpcError);
-        setError(rpcError.message || "Failed to create organization");
+      const payload = (await res.json().catch(() => ({}))) as {
+        orgId?: string;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        setError(payload.error ?? "Failed to create organization");
         return;
       }
 
-      if (!data) {
-        setError("Failed to create organization. Please try again.");
-        return;
-      }
-
-      // Success - redirect to products
       router.push("/products");
       router.refresh();
     } catch (err) {

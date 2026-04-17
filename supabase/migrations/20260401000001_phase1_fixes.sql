@@ -136,7 +136,14 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.create_delivery_task TO authenticated;
+-- Full signature required: 20260331000002 left a 9-arg overload in place,
+-- and CREATE OR REPLACE above actually installs a *second* 10-arg function
+-- rather than replacing it. Ambiguous unqualified GRANT fails on SQLSTATE
+-- 42725. 20260403000002_repair_create_delivery_task drops both overloads
+-- and rebuilds cleanly; this grant just needs to survive until then.
+GRANT EXECUTE ON FUNCTION public.create_delivery_task(
+  TEXT, TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB
+) TO authenticated;
 
 -- ============================================================
 -- 3. ORG SETTINGS TABLE (Phase 2 prep)

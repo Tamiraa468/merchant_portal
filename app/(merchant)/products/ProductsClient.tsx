@@ -2,11 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import LogoutButton from "@/components/auth/LogoutButton";
-import Link from "next/link";
 import {
-  Table,
-  Button,
   Modal,
   Form,
   Input,
@@ -14,13 +10,12 @@ import {
   Switch,
   Space,
   Tag,
-  Empty,
   App,
   Dropdown,
   Tooltip,
+  Button as AntButton,
 } from "antd";
 import {
-  PlusOutlined,
   ReloadOutlined,
   StopOutlined,
   CheckCircleOutlined,
@@ -28,6 +23,7 @@ import {
 } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product } from "@/types/database";
+import { Button, DataTable, PageHeader } from "@/components/ui";
 
 interface ProductFormValues {
   name: string;
@@ -39,19 +35,23 @@ interface ProductsClientProps {
   orgId: string;
 }
 
-/** Returns human-readable unavailability label if the product is currently unavailable */
 function getUnavailableLabel(until: string | null | undefined): string | null {
   if (!until) return null;
   const d = new Date(until);
-  if (d <= new Date()) return null; // already expired
-  return `Unavailable until ${d.toLocaleString([], { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" })}`;
+  if (d <= new Date()) return null;
+  return `${d.toLocaleString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    day: "numeric",
+  })} хүртэл боломжгүй`;
 }
 
 const AVAILABILITY_PRESETS = [
-  { label: "4 hours",    ms: 4 * 60 * 60 * 1000 },
-  { label: "Rest of today", ms: -1 }, // special: end of today
-  { label: "1 week",    ms: 7 * 24 * 60 * 60 * 1000 },
-  { label: "Indefinitely", ms: 0 }, // 0 = no auto-restore; set far future
+  { label: "4 цаг", ms: 4 * 60 * 60 * 1000 },
+  { label: "Өнөөдрийн үлдсэн цагт", ms: -1 },
+  { label: "1 долоо хоног", ms: 7 * 24 * 60 * 60 * 1000 },
+  { label: "Тодорхойгүй хугацаагаар", ms: 0 },
 ];
 
 const PAGE_SIZE = 10;
@@ -68,48 +68,59 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
   const [total, setTotal] = useState(0);
   const [form] = Form.useForm<ProductFormValues>();
 
-  const fetchProducts = useCallback(async (currentPage = 1) => {
-    setLoading(true);
-    const from = (currentPage - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
+  const fetchProducts = useCallback(
+    async (currentPage = 1) => {
+      setLoading(true);
+      const from = (currentPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
 
-    try {
-      const { data, error, count } = await supabase
-        .from("products")
-        .select("*", { count: "exact" })
-        .eq("org_id", orgId)
-        .order("created_at", { ascending: false })
-        .range(from, to);
+      try {
+        const { data, error, count } = await supabase
+          .from("products")
+          .select("*", { count: "exact" })
+          .eq("org_id", orgId)
+          .order("created_at", { ascending: false })
+          .range(from, to);
 
-      if (error) throw error;
-      setProducts(data ?? []);
-      setTotal(count ?? 0);
-    } catch {
-      message.error("Failed to load products");
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase, orgId, message]);
+        if (error) throw error;
+        setProducts(data ?? []);
+        setTotal(count ?? 0);
+      } catch {
+        message.error("Бүтээгдэхүүн ачаалахад алдаа гарлаа");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [supabase, orgId, message],
+  );
 
-  useEffect(() => { fetchProducts(1); }, [fetchProducts]);
+  useEffect(() => {
+    fetchProducts(1);
+  }, [fetchProducts]);
 
   const handleSubmit = async (values: ProductFormValues) => {
     setSubmitting(true);
     try {
       const { data, error } = await supabase
         .from("products")
-        .insert({ org_id: orgId, name: values.name.trim(), price: values.price, unit: values.unit.trim(), is_active: true })
+        .insert({
+          org_id: orgId,
+          name: values.name.trim(),
+          price: values.price,
+          unit: values.unit.trim(),
+          is_active: true,
+        })
         .select()
         .single();
 
       if (error) throw error;
-      message.success("Product added");
+      message.success("Бүтээгдэхүүн нэмэгдлээ");
       setProducts((prev) => [data, ...prev]);
       setTotal((t) => t + 1);
       setIsModalOpen(false);
       form.resetFields();
     } catch {
-      message.error("Failed to add product");
+      message.error("Бүтээгдэхүүн нэмэхэд алдаа гарлаа");
     } finally {
       setSubmitting(false);
     }
@@ -118,7 +129,9 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
   const handleToggleActive = async (product: Product) => {
     const newStatus = !product.is_active;
     setTogglingIds((prev) => new Set(prev).add(product.id));
-    setProducts((prev) => prev.map((p) => p.id === product.id ? { ...p, is_active: newStatus } : p));
+    setProducts((prev) =>
+      prev.map((p) => (p.id === product.id ? { ...p, is_active: newStatus } : p)),
+    );
 
     try {
       const { error } = await supabase
@@ -126,23 +139,26 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
         .update({ is_active: newStatus })
         .eq("id", product.id);
       if (error) throw error;
-      message.success(newStatus ? "Product activated" : "Product deactivated");
+      message.success(newStatus ? "Идэвхжүүлэв" : "Идэвхгүй болгов");
     } catch {
-      setProducts((prev) => prev.map((p) => p.id === product.id ? { ...p, is_active: !newStatus } : p));
-      message.error("Failed to update product status");
+      setProducts((prev) =>
+        prev.map((p) => (p.id === product.id ? { ...p, is_active: !newStatus } : p)),
+      );
+      message.error("Төлөв шинэчлэхэд алдаа гарлаа");
     } finally {
-      setTogglingIds((prev) => { const s = new Set(prev); s.delete(product.id); return s; });
+      setTogglingIds((prev) => {
+        const s = new Set(prev);
+        s.delete(product.id);
+        return s;
+      });
     }
   };
 
-  /** 86 item: sets unavailable_until + deactivates is_active */
   const handle86 = async (product: Product, presetMs: number) => {
     let until: string;
     if (presetMs === 0) {
-      // Indefinite: set to year 9999
       until = "9999-01-01T00:00:00Z";
     } else if (presetMs === -1) {
-      // End of today
       const eod = new Date();
       eod.setHours(23, 59, 59, 999);
       until = eod.toISOString();
@@ -158,18 +174,25 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
         .eq("id", product.id);
       if (error) throw error;
       setProducts((prev) =>
-        prev.map((p) => p.id === product.id ? { ...p, is_active: false, unavailable_until: until } : p)
+        prev.map((p) =>
+          p.id === product.id
+            ? { ...p, is_active: false, unavailable_until: until }
+            : p,
+        ),
       );
       const label = AVAILABILITY_PRESETS.find((p) => p.ms === presetMs)?.label ?? "";
-      message.success(`"${product.name}" marked unavailable for ${label}`);
+      message.success(`"${product.name}" — ${label} боломжгүй`);
     } catch {
-      message.error("Failed to mark item unavailable");
+      message.error("Боломжгүй болгоход алдаа гарлаа");
     } finally {
-      setTogglingIds((prev) => { const s = new Set(prev); s.delete(product.id); return s; });
+      setTogglingIds((prev) => {
+        const s = new Set(prev);
+        s.delete(product.id);
+        return s;
+      });
     }
   };
 
-  /** Restore availability: clear unavailable_until and reactivate */
   const handleRestore = async (product: Product) => {
     setTogglingIds((prev) => new Set(prev).add(product.id));
     try {
@@ -179,19 +202,27 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
         .eq("id", product.id);
       if (error) throw error;
       setProducts((prev) =>
-        prev.map((p) => p.id === product.id ? { ...p, is_active: true, unavailable_until: null } : p)
+        prev.map((p) =>
+          p.id === product.id
+            ? { ...p, is_active: true, unavailable_until: null }
+            : p,
+        ),
       );
-      message.success(`"${product.name}" is available again`);
+      message.success(`"${product.name}" дахин боломжтой`);
     } catch {
-      message.error("Failed to restore availability");
+      message.error("Сэргээхэд алдаа гарлаа");
     } finally {
-      setTogglingIds((prev) => { const s = new Set(prev); s.delete(product.id); return s; });
+      setTogglingIds((prev) => {
+        const s = new Set(prev);
+        s.delete(product.id);
+        return s;
+      });
     }
   };
 
   const columns: ColumnsType<Product> = [
     {
-      title: "Name",
+      title: "Нэр",
       dataIndex: "name",
       key: "name",
       sorter: (a, b) => a.name.localeCompare(b.name),
@@ -199,7 +230,9 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
         const unavailLabel = getUnavailableLabel(record.unavailable_until);
         return (
           <div>
-            <span className={!record.is_active ? "text-gray-400 line-through" : ""}>{name}</span>
+            <span className={!record.is_active ? "text-gray-400 line-through" : ""}>
+              {name}
+            </span>
             {unavailLabel && (
               <div className="text-xs text-orange-500 mt-0.5">{unavailLabel}</div>
             )}
@@ -208,7 +241,7 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
       },
     },
     {
-      title: "Price",
+      title: "Үнэ",
       dataIndex: "price",
       key: "price",
       render: (price: number) => `₮${price.toLocaleString()}`,
@@ -216,36 +249,40 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
       align: "right",
     },
     {
-      title: "Unit",
+      title: "Нэгж",
       dataIndex: "unit",
       key: "unit",
       responsive: ["md"],
     },
     {
-      title: "Status",
+      title: "Төлөв",
       key: "status",
       render: (_, record) => {
         const unavailLabel = getUnavailableLabel(record.unavailable_until);
-        if (unavailLabel) return <Tag color="orange">Unavailable</Tag>;
+        if (unavailLabel) return <Tag color="orange">Боломжгүй</Tag>;
         return (
           <Tag color={record.is_active ? "green" : "default"}>
-            {record.is_active ? "Active" : "Inactive"}
+            {record.is_active ? "Идэвхтэй" : "Идэвхгүй"}
           </Tag>
         );
       },
       filters: [
-        { text: "Active", value: "active" },
-        { text: "Inactive", value: "inactive" },
-        { text: "Unavailable", value: "unavailable" },
+        { text: "Идэвхтэй", value: "active" },
+        { text: "Идэвхгүй", value: "inactive" },
+        { text: "Боломжгүй", value: "unavailable" },
       ],
       onFilter: (value, record) => {
-        if (value === "unavailable") return !!getUnavailableLabel(record.unavailable_until);
-        if (value === "active") return record.is_active && !getUnavailableLabel(record.unavailable_until);
+        if (value === "unavailable")
+          return !!getUnavailableLabel(record.unavailable_until);
+        if (value === "active")
+          return (
+            record.is_active && !getUnavailableLabel(record.unavailable_until)
+          );
         return !record.is_active;
       },
     },
     {
-      title: "Actions",
+      title: "Үйлдэл",
       key: "actions",
       render: (_, record) => {
         const isUnavailable = !!getUnavailableLabel(record.unavailable_until);
@@ -253,30 +290,27 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
 
         return (
           <Space size="small" wrap>
-            {/* Active toggle */}
-            <Tooltip title={record.is_active ? "Deactivate" : "Activate"}>
+            <Tooltip title={record.is_active ? "Идэвхгүй болгох" : "Идэвхжүүлэх"}>
               <Switch
                 checked={record.is_active}
                 onChange={() => handleToggleActive(record)}
                 loading={isLoading}
                 size="small"
-                aria-label={`Toggle ${record.name} active status`}
+                aria-label={`${record.name}-ийн идэвхтэй төлөв`}
               />
             </Tooltip>
 
-            {/* 86 / Restore */}
             {isUnavailable ? (
-              <Button
+              <AntButton
                 size="small"
                 type="primary"
                 ghost
                 icon={<CheckCircleOutlined />}
                 loading={isLoading}
                 onClick={() => handleRestore(record)}
-                aria-label={`Restore ${record.name}`}
               >
-                Restore
-              </Button>
+                Сэргээх
+              </AntButton>
             ) : (
               <Dropdown
                 menu={{
@@ -288,15 +322,16 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
                 }}
                 trigger={["click"]}
               >
-                <Button
-                  size="small"
-                  danger
-                  icon={<StopOutlined />}
-                  loading={isLoading}
-                  aria-label={`Mark ${record.name} unavailable`}
-                >
-                  86 Item <DownOutlined />
-                </Button>
+                <Tooltip title="Бүтээгдэхүүнийг түр хугацаанд захиалгаас хасах. Сонгосон хугацаа дуусахад автоматаар сэргэнэ.">
+                  <AntButton
+                    size="small"
+                    danger
+                    icon={<StopOutlined />}
+                    loading={isLoading}
+                  >
+                    Түр хасах <DownOutlined />
+                  </AntButton>
+                </Tooltip>
               </Dropdown>
             )}
           </Space>
@@ -305,103 +340,71 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
     },
   ];
 
+  const headerAction = (
+    <Space>
+      <AntButton
+        icon={<ReloadOutlined />}
+        onClick={() => fetchProducts(page)}
+        loading={loading}
+      >
+        Сэргээх
+      </AntButton>
+      <Button
+        variant="primary"
+        onClick={() => setIsModalOpen(true)}
+      >
+        + Шинэ бүтээгдэхүүн
+      </Button>
+    </Space>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16 gap-4">
-            <div className="flex items-center gap-4">
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Products</h1>
-              <nav className="hidden md:flex items-center gap-4" aria-label="Section navigation">
-                {[
-                  { href: "/dashboard", label: "Dashboard" },
-                  { href: "/orders", label: "Orders" },
-                  { href: "/tasks", label: "Tasks" },
-                ].map((l) => (
-                  <Link
-                    key={l.href}
-                    href={l.href}
-                    className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white text-sm font-medium"
-                  >
-                    {l.label}
-                  </Link>
-                ))}
-                <Link href="/products" className="text-blue-600 dark:text-blue-400 text-sm font-medium">
-                  Products
-                </Link>
-              </nav>
-            </div>
-            <Space wrap>
-              <Button icon={<ReloadOutlined />} onClick={() => fetchProducts(page)} loading={loading} aria-label="Refresh products">
-                <span className="hidden sm:inline">Refresh</span>
-              </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setIsModalOpen(true); }}>
-                Add Product
-              </Button>
-              <LogoutButton />
-            </Space>
-          </div>
-        </div>
-      </header>
+    <div className="space-y-6 max-w-[1400px] mx-auto">
+      <PageHeader title="Бүтээгдэхүүн" action={headerAction} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-4">
-          <p className="text-sm text-gray-500">
-            <strong>86 Item</strong> temporarily removes a product from ordering. Choose a duration from the dropdown.
-            It auto-restores when the time expires, or you can restore it early.
-          </p>
-        </div>
+      <DataTable<Product>
+        columns={columns}
+        data={products}
+        rowKey="id"
+        loading={loading}
+        pagination={{
+          current: page,
+          pageSize: PAGE_SIZE,
+          total,
+          onChange: (p) => {
+            setPage(p);
+            fetchProducts(p);
+          },
+        }}
+        emptyTitle="Одоогоор бүтээгдэхүүн алга байна"
+        emptyDescription="Дээрх товчноос шинэ бүтээгдэхүүн нэмнэ үү."
+      />
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-          <Table
-            columns={columns}
-            dataSource={products}
-            rowKey="id"
-            loading={loading}
-            scroll={{ x: "max-content" }}
-            pagination={{
-              current: page,
-              pageSize: PAGE_SIZE,
-              total,
-              showTotal: (t, range) => `${range[0]}-${range[1]} of ${t} products`,
-              onChange: (p) => { setPage(p); fetchProducts(p); },
-            }}
-            locale={{
-              emptyText: (
-                <Empty description="No products yet. Click 'Add Product' to create one." />
-              ),
-            }}
-          />
-        </div>
-      </main>
-
-      {/* Add Product Modal */}
       <Modal
-        title="Add New Product"
+        title="Шинэ бүтээгдэхүүн нэмэх"
         open={isModalOpen}
-        onCancel={() => { setIsModalOpen(false); form.resetFields(); }}
+        onCancel={() => setIsModalOpen(false)}
         footer={null}
-        forceRender
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit} className="mt-4">
           <Form.Item
             name="name"
-            label="Product Name"
+            label="Бүтээгдэхүүний нэр"
             rules={[
-              { required: true, message: "Please enter the product name" },
-              { min: 2, message: "Name must be at least 2 characters" },
+              { required: true, message: "Бүтээгдэхүүний нэрийг оруулна уу" },
+              { min: 2, message: "Нэр доод тал нь 2 тэмдэгт байх ёстой" },
             ]}
           >
-            <Input placeholder="Enter product name" maxLength={100} />
+            <Input placeholder="Бүтээгдэхүүний нэр оруулах" maxLength={100} />
           </Form.Item>
 
           <Form.Item
             name="price"
-            label="Price (₮)"
+            label="Үнэ (₮)"
             rules={[
-              { required: true, message: "Please enter the price" },
-              { type: "number", min: 0, message: "Price must be a positive number" },
+              { required: true, message: "Үнийг оруулна уу" },
+              { type: "number", min: 0, message: "Үнэ эерэг тоо байх ёстой" },
             ]}
           >
             <InputNumber
@@ -418,16 +421,20 @@ export default function ProductsClient({ orgId }: ProductsClientProps) {
 
           <Form.Item
             name="unit"
-            label="Unit"
-            rules={[{ required: true, message: "Please enter the unit" }]}
+            label="Нэгж"
+            rules={[{ required: true, message: "Нэгжийг оруулна уу" }]}
           >
-            <Input placeholder="e.g., pcs, kg, box" maxLength={20} />
+            <Input placeholder="жнь: ш, кг, хайрцаг" maxLength={20} />
           </Form.Item>
 
           <Form.Item className="mb-0 flex justify-end">
             <Space>
-              <Button onClick={() => { setIsModalOpen(false); form.resetFields(); }}>Cancel</Button>
-              <Button type="primary" htmlType="submit" loading={submitting}>Add Product</Button>
+              <AntButton onClick={() => setIsModalOpen(false)}>
+                Цуцлах
+              </AntButton>
+              <AntButton type="primary" htmlType="submit" loading={submitting}>
+                Нэмэх
+              </AntButton>
             </Space>
           </Form.Item>
         </Form>

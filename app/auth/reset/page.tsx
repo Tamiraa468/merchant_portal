@@ -3,7 +3,15 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import AuthLayout from "@/components/auth/AuthLayout";
+import { Input, Button } from "@/components/ui";
+
+interface FieldErrors {
+  password?: string;
+  confirm?: string;
+}
 
 export default function ResetPasswordPage() {
   const supabase = createClient();
@@ -11,232 +19,146 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [success, setSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
 
-  // Supabase sets a session from the email link; wait for it.
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setSessionReady(true);
       } else {
-        // No session — the link may be invalid or expired
-        setError("This reset link is invalid or has expired. Please request a new one.");
+        setFormError("Энэхүү холбоос хүчингүй эсвэл хугацаа дууссан байна.");
       }
     });
   }, [supabase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setFormError(null);
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-    if (password !== confirm) {
-      setError("Passwords do not match.");
-      return;
-    }
+    const errors: FieldErrors = {};
+    if (!password) errors.password = "Нууц үг шаардлагатай";
+    else if (password.length < 8) errors.password = "Нууц үг 8-аас дээш тэмдэгттэй байна";
+    if (!confirm) errors.confirm = "Баталгаажуулна уу";
+    else if (password !== confirm) errors.confirm = "Нууц үг таарахгүй байна";
+
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
 
     setLoading(true);
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
       setSuccess(true);
-      setTimeout(() => router.push("/dashboard"), 2000);
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to update password.";
-      setError(msg);
+      setTimeout(() => router.push("/auth/login"), 2000);
+    } catch {
+      setFormError("Нууц үг шинэчлэхэд алдаа гарлаа.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main
-      className="min-h-screen flex items-center justify-center bg-gradient-to-br
-                 from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4 py-12"
-    >
-      <title>Set New Password | Merchant Portal</title>
+    <AuthLayout>
+      <title>Шинэ нууц үг | Merchant Portal</title>
 
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-600 mb-4">
-            <svg
-              className="w-8 h-8 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-              />
-            </svg>
+      {success ? (
+        <div className="text-center">
+          <div className="w-14 h-14 mx-auto rounded-full bg-[#D1FAE5] flex items-center justify-center mb-5">
+            <CheckCircle2 className="w-7 h-7 text-[#059669]" />
           </div>
-          <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
-            Merchant Portal
-          </h2>
+          <h1 className="text-2xl font-medium text-[#111827]">Амжилттай шинэчлэгдлээ</h1>
+          <p className="text-[13px] text-[#6B7280] mt-1.5">
+            Нэвтрэх хуудас руу шилжүүлж байна…
+          </p>
         </div>
+      ) : (
+        <div>
+          <header className="mb-6">
+            <h1 className="text-2xl font-medium text-[#111827]">Шинэ нууц үг</h1>
+            <p className="text-[13px] text-[#6B7280] mt-1.5">
+              Шинэ нууц үгээ оруулна уу
+            </p>
+          </header>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
-          {success ? (
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
-                <svg
-                  className="w-8 h-8 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                Password Updated
-              </h1>
-              <p className="text-gray-500 dark:text-gray-400">
-                Redirecting you to the dashboard…
-              </p>
+          {formError && (
+            <div
+              role="alert"
+              className="mb-4 p-3 bg-[#FEE2E2] border border-[#FCA5A5] rounded-lg text-sm text-[#B91C1C]"
+            >
+              {formError}{" "}
+              {!sessionReady && (
+                <Link href="/auth/forgot-password" className="underline font-medium">
+                  Шинэ холбоос авах
+                </Link>
+              )}
             </div>
-          ) : (
-            <>
-              <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Set New Password
-                </h1>
-                <p className="text-gray-500 dark:text-gray-400 mt-2">
-                  Choose a strong password for your account.
-                </p>
-              </div>
+          )}
 
-              {error && (
-                <div
-                  role="alert"
-                  className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200
-                             dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm"
-                >
-                  {error}{" "}
-                  {!sessionReady && (
-                    <Link href="/auth/forgot-password" className="underline">
-                      Request a new link
-                    </Link>
-                  )}
-                </div>
-              )}
-
-              {sessionReady && (
-                <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-                  <div>
-                    <label
-                      htmlFor="password"
-                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                    >
-                      New Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="password"
-                        name="password"
-                        type={showPassword ? "text" : "password"}
-                        required
-                        autoComplete="new-password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="At least 8 characters"
-                        className="w-full px-4 py-3 pr-12 rounded-lg border border-gray-300
-                                   dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900
-                                   dark:text-white focus:outline-none focus:ring-2
-                                   focus:ring-blue-500 focus:border-transparent"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500
-                                   hover:text-gray-700 text-sm"
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                      >
-                        {showPassword ? "Hide" : "Show"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="confirm"
-                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                    >
-                      Confirm New Password
-                    </label>
-                    <input
-                      id="confirm"
-                      name="confirm"
-                      type="password"
-                      required
-                      autoComplete="new-password"
-                      value={confirm}
-                      onChange={(e) => setConfirm(e.target.value)}
-                      placeholder="Re-enter your password"
-                      className="w-full px-4 py-3 rounded-lg border border-gray-300
-                                 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900
-                                 dark:text-white focus:outline-none focus:ring-2
-                                 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
+          {sessionReady && (
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              <Input
+                label="Шинэ нууц үг"
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setFieldErrors((p) => ({ ...p, password: undefined })); }}
+                placeholder="Дор хаяж 8 тэмдэгт"
+                error={fieldErrors.password}
+                rightIcon={
                   <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400
-                               text-white font-medium rounded-lg transition-colors flex items-center
-                               justify-center gap-2"
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="text-[#9CA3AF] hover:text-[#6B7280] transition-colors"
+                    aria-label={showPassword ? "Нууц үг нуух" : "Нууц үг харах"}
                   >
-                    {loading ? (
-                      <>
-                        <svg
-                          className="animate-spin h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          aria-hidden="true"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12" cy="12" r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                          />
-                        </svg>
-                        Updating…
-                      </>
-                    ) : (
-                      "Update Password"
-                    )}
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
-                </form>
-              )}
-            </>
+                }
+              />
+
+              <Input
+                label="Баталгаажуулах"
+                id="confirm"
+                name="confirm"
+                type={showConfirm ? "text" : "password"}
+                autoComplete="new-password"
+                value={confirm}
+                onChange={(e) => { setConfirm(e.target.value); setFieldErrors((p) => ({ ...p, confirm: undefined })); }}
+                placeholder="Нууц үгээ давтан оруулна уу"
+                error={fieldErrors.confirm}
+                rightIcon={
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm((v) => !v)}
+                    className="text-[#9CA3AF] hover:text-[#6B7280] transition-colors"
+                    aria-label={showConfirm ? "Нууц үг нуух" : "Нууц үг харах"}
+                  >
+                    {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                }
+              />
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                fullWidth
+                loading={loading}
+                className="!h-11 mt-2"
+              >
+                {loading ? "Хадгалж байна…" : "Хадгалах"}
+              </Button>
+            </form>
           )}
         </div>
-      </div>
-    </main>
+      )}
+    </AuthLayout>
   );
 }

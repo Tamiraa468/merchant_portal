@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { MERCHANT_ALLOWED_ROLES, type UserRole } from "@/types/database";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import AppLayout from "@/components/layout/AppLayout";
 
 interface MerchantLayoutProps {
   children: React.ReactNode;
@@ -73,17 +73,16 @@ export default function MerchantLayout({ children }: MerchantLayoutProps) {
     return () => { subscription.unsubscribe(); };
   }, [checkAuthorization, router, supabase.auth]);
 
-  if (isLoading) {
-    return <LoadingSpinner text="Verifying access…" />;
-  }
-
-  if (!isAuthorized) {
+  // Render the chrome immediately so sidebar/topbar/page skeletons appear
+  // during the auth check. If the user turns out to be unauthorized, the
+  // checkAuthorization flow signs them out and redirects.
+  if (!isLoading && !isAuthorized) {
     return null;
   }
 
   return (
     <ErrorBoundary>
-      {children}
+      <AppLayout>{children}</AppLayout>
     </ErrorBoundary>
   );
 }

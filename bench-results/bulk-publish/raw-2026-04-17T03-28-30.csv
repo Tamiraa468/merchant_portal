@@ -1,0 +1,5 @@
+strategy,n,iteration,total_ms,per_task_ms,success_count,error_count
+sequential_rpc,10.00,0.000,227.5,22.75,10.00,0.000
+parallel_rpc,10.00,0.000,47.57,4.757,10.00,0.000
+batched_update,10.00,0.000,7.674,0.767,0.000,10.00
+bulk_rpc,10.00,0.000,5.816,0.582,10.00,0.000

@@ -1,27 +1,134 @@
 @import "tailwindcss";
 
+/* ── Design tokens ─────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Backgrounds */
+  --color-bg-page: #F7F8FA;
+  --color-bg-card: #FFFFFF;
+  --color-bg-sidebar: #1A1A1A;
+
+  /* Text */
+  --color-text-primary: #111827;
+  --color-text-secondary: #6B7280;
+  --color-text-muted: #9CA3AF;
+
+  /* Borders */
+  --color-border: #E5E7EB;
+
+  /* Accent */
+  --color-accent: #FF6B35;
+  --color-accent-hover: #FF8A5C;
+  --color-accent-soft: #FFE7D6;
+
+  /* Status */
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger:  #EF4444;
+  --color-info:    #3B82F6;
+
+  /* Radius */
+  --radius-card: 12px;
+  --radius-button: 8px;
+  --radius-input: 6px;
+
+  /* Shadow */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  --background: var(--color-bg-page);
+  --foreground: var(--color-text-primary);
+  color-scheme: light;
 }
 
+/* Expose tokens as Tailwind v4 utilities (bg-page, text-primary, etc.) */
 @theme inline {
+  --color-page: var(--color-bg-page);
+  --color-card: var(--color-bg-card);
+  --color-sidebar: var(--color-bg-sidebar);
+  --color-primary: var(--color-text-primary);
+  --color-secondary: var(--color-text-secondary);
+  --color-muted: var(--color-text-muted);
+  --color-border: var(--color-border);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
+  --color-info: var(--color-info);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #111827;
-    --foreground: #f3f4f6;
-  }
+body {
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  font-family: var(--font-inter), Inter, "Helvetica Neue", Arial, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-  min-height: 100vh;
+/* Focus ring (accessibility) */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── DataTable styling ─────────────────────────────────────── */
+.merchant-table .ant-table {
+  background: transparent;
+}
+.merchant-table .ant-table-thead > tr > th {
+  background: #F9FAFB;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  border-bottom: 1px solid var(--color-border);
+}
+.merchant-table .ant-table-thead > tr > th::before {
+  display: none !important;
+}
+.merchant-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid #F3F4F6;
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+.merchant-table .ant-table-tbody > tr:hover > td {
+  background: #FFF8F4 !important;
+}
+.merchant-table .ant-table-tbody > tr:last-child > td {
+  border-bottom: none;
+}
+
+/* ── Skeleton shimmer ──────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -1000px 0; }
+  100% { background-position:  1000px 0; }
+}
+.skeleton {
+  display: block;
+  background: linear-gradient(90deg, #EEF0F3 0%, #F7F8FA 50%, #EEF0F3 100%);
+  background-size: 1000px 100%;
+  animation: shimmer 1.6s linear infinite;
+  border-radius: 6px;
+}
+.skeleton-dark {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 1.6s linear infinite;
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton, .skeleton-dark { animation: none; }
 }

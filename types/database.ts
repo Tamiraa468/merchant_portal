@@ -215,9 +215,10 @@ export interface TaskItem {
   id: string;
   task_id: string;
   product_id: string;
-  qty: number;
-  note?: string | null;
-  created_at: string;
+  product_name: string;
+  unit_price: number;
+  quantity: number;
+  total_price: number;
 }
 
 export interface CartItem {
@@ -289,29 +290,29 @@ export const ORDER_STATUS_CONFIG: Record<
   }
 > = {
   pending_payment: {
-    label: "Pending Payment",
+    label: "Төлбөр хүлээгдэж буй",
     color: "default",
-    description: "Waiting for customer payment",
+    description: "Үйлчлүүлэгчийн төлбөр хүлээгдэж байна",
   },
   paid: {
-    label: "Paid",
+    label: "Төлөгдсөн",
     color: "blue",
-    description: "Payment confirmed, awaiting merchant action",
+    description: "Төлбөр баталгаажсан, худалдаачны хариу хүлээгдэж байна",
   },
   preparing: {
-    label: "Preparing",
+    label: "Бэлтгэж буй",
     color: "orange",
-    description: "Merchant is preparing the order",
+    description: "Худалдаачин захиалгыг бэлтгэж байна",
   },
   ready_for_delivery: {
-    label: "Ready for Delivery",
+    label: "Хүргэлтэнд бэлэн",
     color: "cyan",
-    description: "Order is ready to be picked up / delivered",
+    description: "Захиалга авах/хүргэхэд бэлэн болсон",
   },
   cancelled: {
-    label: "Cancelled",
+    label: "Цуцлагдсан",
     color: "gray",
-    description: "Order has been cancelled",
+    description: "Захиалга цуцлагдсан",
   },
 };
 
@@ -354,7 +355,7 @@ export interface WeeklyHour {
   closed: boolean;
 }
 
-export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const DAY_NAMES = ["Ням", "Дав", "Мяг", "Лха", "Пүр", "Баа", "Бям"];
 
 export const DEFAULT_WEEKLY_HOURS: WeeklyHour[] = DAY_NAMES.map((_, day) => ({
   day,
