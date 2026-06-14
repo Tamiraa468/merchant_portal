@@ -4,8 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
-  ClipboardList,
-  Package,
   Truck,
   BarChart3,
   DollarSign,
@@ -26,8 +24,6 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: "/dashboard",  label: "Хяналтын самбар",      Icon: LayoutDashboard },
-  { href: "/orders",     label: "Захиалга",             Icon: ClipboardList },
-  { href: "/products",   label: "Бүтээгдэхүүн",         Icon: Package },
   { href: "/tasks",      label: "Хүргэлтийн даалгавар", Icon: Truck },
   { href: "/analytics",  label: "Аналитик",             Icon: BarChart3 },
   { href: "/financials", label: "Санхүү",               Icon: DollarSign },

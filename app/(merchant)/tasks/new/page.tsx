@@ -457,10 +457,10 @@ export default function NewDeliveryTaskPage() {
                 size="small"
                 scroll={{ x: "max-content" }}
               />
-              <div className="flex justify-end mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="flex justify-end mt-4 p-3 bg-white border border-gray-200 rounded-lg">
                 <Space size="large">
-                  <Text>Сагсны нийт дүн:</Text>
-                  <Text strong className="text-blue-600">
+                  <Text className="!text-gray-900">Сагсны нийт дүн:</Text>
+                  <Text strong className="!text-blue-600">
                     ₮{cartTotal.toLocaleString()}
                   </Text>
                 </Space>

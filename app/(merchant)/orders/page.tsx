@@ -323,7 +323,7 @@ export default function OrdersPage() {
         title={`Захиалга — ${drawerOrder?.customer_name ?? ""}`}
         open={!!drawerOrder}
         onClose={() => setDrawerOrder(null)}
-        width={Math.min(480, typeof window !== "undefined" ? window.innerWidth : 480)}
+        size="default"
       >
         {drawerOrder && (
           <div className="space-y-4">
